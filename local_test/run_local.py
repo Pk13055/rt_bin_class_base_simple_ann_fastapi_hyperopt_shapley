@@ -1,8 +1,13 @@
-import os, shutil
+#!/usr/bin/env python3
+# coding: utf-8
+
+import os
+import shutil
 import sys
 import time
-import pandas as pd, numpy as np
-import pprint
+
+import numpy as np
+import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -12,13 +17,12 @@ from sklearn.metrics import (
 )
 
 sys.path.insert(0, "./../app")
-import algorithm.utils as utils
-import algorithm.model_trainer as model_trainer
+import algorithm.model.classifier as classifier
 import algorithm.model_server as model_server
+import algorithm.model_trainer as model_trainer
 import algorithm.model_tuner as model_tuner
 import algorithm.preprocessing.pipeline as pipeline
-import algorithm.model.classifier as classifier
-
+import algorithm.utils as utils
 
 inputs_path = "./ml_vol/inputs/"
 
@@ -48,11 +52,11 @@ if not os.path.exists(test_results_path):
 local_datapath = "./../../datasets"
 
 """
-this script is useful for doing the algorithm testing locally without needing 
+this script is useful for doing the algorithm testing locally without needing
 to build the docker image and run the container.
 make sure you create your virtual environment, install the dependencies
-from requirements.txt file, and then use that virtual env to do your testing. 
-This isnt foolproof. You can still have host os and python version related issues, so beware. 
+from requirements.txt file, and then use that virtual env to do your testing.
+This isnt foolproof. You can still have host os and python version related issues, so beware.
 """
 
 model_name = classifier.MODEL_NAME
@@ -134,7 +138,7 @@ def train_and_save_algo():
     # read data config
     data_schema = utils.get_data_schema(data_schema_path)
     # get trained preprocessor, model, training history
-    preprocessor, model = model_trainer.get_trained_model(
+    preprocessor, model, _ = model_trainer.get_trained_model(
         train_data, data_schema, hyper_parameters
     )
     # Save the processing pipeline
@@ -144,7 +148,7 @@ def train_and_save_algo():
     print("done with training")
 
 
-def load_and_test_algo():
+def load_and_test_algo(dataset_name: str):
     # Read data
     test_data = utils.get_data(test_data_path)
     # read data config
@@ -164,13 +168,13 @@ def load_and_test_algo():
     else:
         local_explanations = None
     # score the results
-    test_key = get_test_key()
+    test_key = get_test_key(dataset_name)
     results = score(test_key, predictions, data_schema)
     print("done with predictions")
     return results, local_explanations
 
 
-def get_test_key():
+def get_test_key(dataset_name: str) -> pd.DataFrame:
     test_key = pd.read_csv(
         f"{local_datapath}/{dataset_name}/{dataset_name}_test_key.csv"
     )
@@ -265,7 +269,7 @@ def get_file_path_and_name(run_hpt, dataset_name):
     return full_path
 
 
-def run_train_and_test(dataset_name, run_hpt, num_hpt_trials):
+def run_train_and_test(dataset_name: str, run_hpt: bool, num_hpt_trials: int):
     start = time.time()
 
     create_ml_vol()  # create the directory which imitates the bind mount on container
@@ -274,10 +278,9 @@ def run_train_and_test(dataset_name, run_hpt, num_hpt_trials):
         run_HPT(num_hpt_trials)  # run HPT and save tuned hyperparameters
     train_and_save_algo()  # train the model and save
 
-    (
-        results,
-        local_explanations,
-    ) = load_and_test_algo()  # load the trained model and get predictions on test data
+    results, local_explanations = load_and_test_algo(
+        dataset_name
+    )  # load the trained model and get predictions on test data
 
     end = time.time()
     elapsed_time_in_minutes = np.round((end - start) / 60.0, 2)
@@ -295,8 +298,7 @@ def run_train_and_test(dataset_name, run_hpt, num_hpt_trials):
     return results, local_explanations
 
 
-if __name__ == "__main__":
-
+def main():
     num_hpt_trials = 10
     run_hpt_list = [False, True]
     run_hpt_list = [False]
@@ -330,3 +332,7 @@ if __name__ == "__main__":
             print("-" * 60)
 
         save_test_outputs(all_results, run_hpt, dataset_name=None)
+
+
+if __name__ == "__main__":
+    main()

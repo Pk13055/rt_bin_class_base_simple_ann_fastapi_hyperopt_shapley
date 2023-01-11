@@ -1,21 +1,22 @@
 # major part of code sourced from aws sagemaker example:
 # https://github.com/aws/amazon-sagemaker-examples/blob/main/advanced_functionality/scikit_bring_your_own/container/decision_trees/predictor.py
 
-import io
 import json
-import numpy as np, pandas as pd
-import flask
-import traceback
+import os
 import sys
-import os, warnings
+import traceback
+import warnings
+
+import pandas as pd
+from fastapi import Body, FastAPI
+from fastapi.responses import JSONResponse
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # or any {'0', '1', '2'}
 warnings.filterwarnings("ignore")
 
 import algorithm.utils as utils
-from algorithm.model_server import ModelServer
 from algorithm.model import classifier as model
-
+from algorithm.model_server import ModelServer
 
 prefix = "/opt/ml_vol/"
 data_schema_path = os.path.join(prefix, "inputs", "data_config")
@@ -32,86 +33,67 @@ data_schema = utils.get_data_schema(data_schema_path)
 model_server = ModelServer(model_path=model_path, data_schema=data_schema)
 
 
-# The flask app for serving predictions
-app = flask.Flask(__name__)
+# The fastapi app for serving predictions
+app = FastAPI()
 
 
-@app.route("/ping", methods=["GET"])
-def ping():
+class NPResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(content, cls=utils.NpEncoder).encode("utf-8")
+
+
+@app.get("/ping", tags=["ping", "healthcheck"])
+async def ping() -> dict:
     """Determine if the container is working and healthy."""
-    status = 200
-    response = f"Hello - I am {model.MODEL_NAME} model and I am at your service!"
-    return flask.Response(response=response, status=status, mimetype="application/json")
+    response = f"Hello, I am {model.MODEL_NAME} model and I am at you service!"
+    return {
+        "success": True,
+        "message": response,
+    }
 
 
-@app.route("/infer", methods=["POST"])
-def infer():
-    """Do an inference on a single batch of data. In this sample server, we take data as a JSON object, convert
-    it to a pandas data frame for internal use and then convert the predictions back to JSON.
+@app.post("/infer", tags=["inference"])
+async def infer(instances: list = Body(embed=True)) -> dict:
+    """Do an inference on a single batch of data. In this sample server, we take data as CSV, convert
+    it to a pandas data frame for internal use and then convert the predictions back to CSV (which really
+    just means one prediction per line, since there's a single column.
     """
-    # Convert from CSV to pandas
-    if flask.request.content_type == "application/json":
-        req_data_dict = json.loads(flask.request.data.decode("utf-8"))
-        data = pd.DataFrame.from_records(req_data_dict["instances"])
-        print(f"Invoked with {data.shape[0]} records")
-    else:
-        return flask.Response(
-            response="This endpoint only supports application/json data",
-            status=415,
-            mimetype="text/plain",
-        )
+    data = pd.DataFrame.from_records(instances)
+    print(f"Invoked with {data.shape[0]} records")
 
     # Do the prediction
     try:
-        # Do the prediction
-        predictions = model_server.predict_to_json(data)
+        predictions = model_server.predict(data)
         return {
-            "success": True,
-            "predictions": predictions,
+            "predictions": predictions.to_dict(orient="records"),
         }
-
     except Exception as err:
         # Write out an error file. This will be returned as the failureReason to the client.
         trc = traceback.format_exc()
-        error_msg = "Exception during inference: " + str(err) + "\n" + trc
         with open(failure_path, "w") as s:
-            s.write(error_msg)
+            s.write("Exception during inference: " + str(err) + "\n" + trc)
         # Printing this causes the exception to be in the training job logs, as well.
         print("Exception during inference: " + str(err) + "\n" + trc, file=sys.stderr)
         # A non-zero exit code causes the training job to be marked as Failed.
-        response = json.dumps({"error": str(err)})
-        return flask.Response(
-            response=response,
-            status=400,
-            mimetype="text/plain",
-        )
+        return {
+            "success": False,
+            "message": f"Exception during inference: {str(err)} (check failure file for more details)",
+        }
 
 
-
-
-@app.route("/explain", methods=["POST"])
-def explain():
+@app.post("/explain", tags=["explain"])
+def explain(instances: list = Body(embed=True)) -> dict:
     """Get local explanations on a few samples. In this  server, we take data as JSON, convert
     it to a pandas data frame for internal use and then convert the explanations back to JSON.
     Explanations come back using the ids passed in the input data.
     """
     # Convert from CSV to pandas
-    if flask.request.content_type == "application/json":
-        req_data_dict = json.loads(flask.request.data.decode("utf-8"))
-        data = pd.DataFrame.from_records(req_data_dict["instances"])
-        print(f"Invoked with {data.shape[0]} records")
-    else:
-        return flask.Response(
-            response="This endpoint only supports application/json data",
-            status=415,
-            mimetype="text/plain",
-        )
-
+    data = pd.DataFrame.from_records(instances)
     print(f"Invoked with {data.shape[0]} records")
-    # Do the prediction
+
     try:
-        explanations = model_server.explain_local(data)  # returns a json string object
-        return flask.Response(response=explanations, status=200, mimetype="text/csv")
+        explanations: dict = model_server.explain_local(data)
+        return NPResponse(explanations)
     except Exception as err:
         # Write out an error file. This will be returned as the failureReason to the client.
         trc = traceback.format_exc()
@@ -123,10 +105,7 @@ def explain():
             file=sys.stderr,
         )
         # A non-zero exit code causes the training job to be marked as Failed.
-
-        return flask.Response(
-            response="Error generating explanations. Check failure file.",
-            status=400,
-            mimetype="text/plain",
-        )
-
+        return {
+            "success": False,
+            "message": f"Exception during explanation: {str(err)} (check failure file for more details)",
+        }

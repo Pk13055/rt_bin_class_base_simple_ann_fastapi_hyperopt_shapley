@@ -9,7 +9,7 @@ Simple ANN Classifier in PyTorch with Shapley explanations for Binary Classifica
 - pandas
 - numpy
 - scikit-optimize
-- flask
+- fastapi
 - nginx
 - uvicorn
 - docker
@@ -25,4 +25,21 @@ Hyperparameter Tuning (HPT) is conducted by finding the optimal l1 and l2 regula
 
 During the model development process, the algorithm was trained and evaluated on a variety of datasets such as email spam detection, customer churn, credit card fraud detection, cancer diagnosis, and titanic passanger survivor prediction.
 
-This Binary Classifier is written using Python as its programming language. PyTorch is used to implement the main algorithm. Scikitlearn is used in the data preprocessing pipeline and model evaluation. Numpy, pandas, and feature_engine are used for the data preprocessing steps. SciKit-Optimize was used to handle the HPT. We use Flask + Nginx + gunicorn for web service. The web service provides three endpoints- /ping for health check, /infer for predictions in real time and /explain to generate local explanations.
+This Binary Classifier is written using Python as its programming language. PyTorch is used to implement the main algorithm. Scikitlearn is used in the data preprocessing pipeline and model evaluation. Numpy, pandas, and `feature_engine` are used for the data preprocessing steps. SciKit-Optimize was used to handle the HPT. We use fastapi + Nginx + uvicorn for web service. The web service provides three endpoints- /ping for health check, /infer for predictions in real time and /explain to generate local explanations.
+
+## Installation
+
+- If running locally:
+
+```bash
+pip install pip-tools
+pip-compile requirements.in > requirements.txt  # to update versions
+pip install -r requirements.txt
+```
+
+- If running in the container:
+
+```bash
+docker build --rm -t ready-tensor/torch-bin .
+```
+

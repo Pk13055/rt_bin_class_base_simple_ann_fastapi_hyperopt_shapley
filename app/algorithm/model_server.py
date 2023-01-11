@@ -1,6 +1,4 @@
 import numpy as np, pandas as pd
-import os, sys
-import json
 from shap import Explainer
 
 import algorithm.utils as utils
@@ -104,8 +102,8 @@ class ModelServer:
 
         if data.shape[0] > self.MAX_LOCAL_EXPLANATIONS:
             msg = f"""Warning!
-            Maximum {self.MAX_LOCAL_EXPLANATIONS} explanation(s) allowed at a time. 
-            Given {data.shape[0]} samples. 
+            Maximum {self.MAX_LOCAL_EXPLANATIONS} explanation(s) allowed at a time.
+            Given {data.shape[0]} samples.
             Selecting top {self.MAX_LOCAL_EXPLANATIONS} sample(s) for explanations."""
             print(msg)
 
@@ -135,7 +133,7 @@ class ModelServer:
         # create json objects of explanation scores
         N = pred_X.shape[0]
         explanations = []
-        for i in range(N):            
+        for i in range(N):
 
             target_class_prob = pred_target_class_prob[i]
             pred_class = class_names[0] if target_class_prob < 0.5 else class_names[1]
@@ -170,7 +168,7 @@ class ModelServer:
         # ------------------------------------------------------
         """
         To plot the shapley values:
-        you can only plot one sample at a time. 
+        you can only plot one sample at a time.
         if you want to plot all samples. create a loop and use the index (sample_idx)
         """
         # sample_idx = 4
@@ -180,5 +178,5 @@ class ModelServer:
         # shap.plots.waterfall(shap_values)
         # ------------------------------------------------------
         explanations = {"predictions": explanations}
-        explanations = json.dumps(explanations, cls=utils.NpEncoder, indent=2)
+        # explanations = json.dumps(explanations, cls=utils.NpEncoder, indent=2)
         return explanations
